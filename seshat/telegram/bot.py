@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from seshat.core import VaultClient, ensure_synced
@@ -58,6 +58,21 @@ Argumentos são `chave=valor`, use aspas para valores com espaço\\.
 Digite qualquer texto sem comando pra buscar no vault\\.
 """
 
+# Registrado no Telegram via set_my_commands (menu "/" do app) — mantém a lista
+# sincronizada com HELP_TEXT em vez de exigir /setcommands manual no BotFather.
+BOT_COMMANDS = [
+    ("help", "Mostra os comandos disponíveis"),
+    ("projects", "Lista projetos (field=... status=... stage=...)"),
+    ("project", "Detalhes de um projeto (slug)"),
+    ("references", "Lista referências (area=... type=... field=...)"),
+    ("search", "Busca no vault (query=... field=... category=...)"),
+    ("newproject", "Cria um novo projeto"),
+    ("history", "Adiciona entrada ao histórico de um projeto"),
+    ("status", "Atualiza status/etapa de um projeto"),
+    ("fragment", "Cria um fragmento"),
+    ("newreference", "Cria uma referência"),
+]
+
 
 class SeshatTelegramBot:
     """Wraps a python-telegram-bot Application wired to a Seshat vault."""
@@ -73,8 +88,12 @@ class SeshatTelegramBot:
         self.vault = VaultClient(vault_root)
         self.git_remote_url = git_remote_url
         self.allowed_user_ids = allowed_user_ids
-        self.app = Application.builder().token(telegram_token).build()
+        self.app = Application.builder().token(telegram_token).post_init(self._post_init).build()
         self._register_handlers()
+
+    async def _post_init(self, application: Application) -> None:
+        """Registers BOT_COMMANDS with Telegram so they show up in the "/" menu."""
+        await application.bot.set_my_commands([BotCommand(name, desc) for name, desc in BOT_COMMANDS])
 
     def _autosync(self, message: str) -> None:
         """Commit and push any vault changes after a write command.
