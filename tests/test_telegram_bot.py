@@ -36,6 +36,21 @@ def last_reply_text(update) -> str:
     return args[0] if args else kwargs.get("text", "")
 
 
+async def run_flow(bot, start_command, *answers, user_data=None):
+    """Starts a guided write command and answers each of its questions in
+    order, returning the final reply text."""
+    user_data = {} if user_data is None else user_data
+    update, context = make_update(ALLOWED_USER, user_data=user_data)
+    await start_command(update, context)
+    last_update = update
+    for answer in answers:
+        update, context = make_update(ALLOWED_USER, user_data=user_data)
+        update.message.text = answer
+        await bot.on_text(update, context)
+        last_update = update
+    return last_reply_text(last_update)
+
+
 @pytest.mark.asyncio
 async def test_unauthorized_user_blocked(bot):
     update, context = make_update(OTHER_USER)
@@ -45,12 +60,10 @@ async def test_unauthorized_user_blocked(bot):
 
 @pytest.mark.asyncio
 async def test_newproject_then_projects_list(bot):
-    update, context = make_update(
-        ALLOWED_USER,
-        'year_month=202608 slug=teste title="Teste Bot" summary="s" field=Programação type=comercial',
+    reply = await run_flow(
+        bot, bot.cmd_newproject, "202608", "teste", "Teste Bot", "s", "Programação", "comercial"
     )
-    await bot.cmd_newproject(update, context)
-    assert "criado" in last_reply_text(update)
+    assert "criado" in reply
 
     update2, context2 = make_update(ALLOWED_USER)
     await bot.cmd_projects(update2, context2)
@@ -59,26 +72,30 @@ async def test_newproject_then_projects_list(bot):
 
 
 @pytest.mark.asyncio
-async def test_newproject_missing_args_reports_error(bot):
-    update, context = make_update(ALLOWED_USER, "slug=teste")
+async def test_newproject_invalid_field_reasked(bot):
+    reply = await run_flow(bot, bot.cmd_newproject, "202608", "teste", "Teste", "s", "NaoExiste")
+    assert "Valor inválido" in reply
+
+
+@pytest.mark.asyncio
+async def test_newproject_can_be_cancelled(bot):
+    user_data = {}
+    update, context = make_update(ALLOWED_USER, user_data=user_data)
     await bot.cmd_newproject(update, context)
-    assert "Erro" in last_reply_text(update)
+    assert "flow" in user_data
+
+    update2, context2 = make_update(ALLOWED_USER, user_data=user_data)
+    await bot.cmd_cancel(update2, context2)
+    assert "Cancelado" in last_reply_text(update2)
+    assert "flow" not in user_data
 
 
 @pytest.mark.asyncio
 async def test_project_detail_and_history_append(bot):
-    update, context = make_update(
-        ALLOWED_USER,
-        'year_month=202608 slug=teste title="Teste" summary="s" field=Programação type=comercial',
-    )
-    await bot.cmd_newproject(update, context)
+    await run_flow(bot, bot.cmd_newproject, "202608", "teste", "Teste", "s", "Programação", "comercial")
 
-    update2, context2 = make_update(
-        ALLOWED_USER,
-        'slug=202608_teste date=2026-08-19 title="Início" summary="Primeira entrada"',
-    )
-    await bot.cmd_history(update2, context2)
-    assert "histórico adicionada" in last_reply_text(update2)
+    reply = await run_flow(bot, bot.cmd_history, "202608_teste", "2026-08-19", "Início", "Primeira entrada")
+    assert "histórico adicionada" in reply
 
     update3, context3 = make_update(ALLOWED_USER, "202608_teste")
     await bot.cmd_project(update3, context3)
@@ -88,17 +105,19 @@ async def test_project_detail_and_history_append(bot):
 
 @pytest.mark.asyncio
 async def test_status_update(bot):
-    update, context = make_update(
-        ALLOWED_USER,
-        'year_month=202608 slug=teste title="Teste" summary="s" field=Programação type=comercial',
-    )
-    await bot.cmd_newproject(update, context)
+    await run_flow(bot, bot.cmd_newproject, "202608", "teste", "Teste", "s", "Programação", "comercial")
 
-    update2, context2 = make_update(
-        ALLOWED_USER, "slug=202608_teste date=2026-08-19 project_status=in_progress"
+    reply = await run_flow(bot, bot.cmd_status, "202608_teste", "2026-08-19", "in_progress", "-", "-")
+    assert "atualizado" in reply
+
+
+@pytest.mark.asyncio
+async def test_newreference_flow(bot):
+    reply = await run_flow(
+        bot, bot.cmd_newreference, "caligrafia", "x", "X", "resumo", "Caligrafia", "technique"
     )
-    await bot.cmd_status(update2, context2)
-    assert "atualizado" in last_reply_text(update2)
+    assert "criada" in reply
+    assert bot.vault.exists("03-References/caligrafia/x.md")
 
 
 @pytest.mark.asyncio
