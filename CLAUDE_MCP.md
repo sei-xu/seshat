@@ -17,76 +17,97 @@ Once connected, Claude will have access to:
 
 ## Local Setup (Claude Code CLI or IDE Extension)
 
-### Option 1: Local HTTP Server (Recommended for Development)
+### Option 1: Stdio MCP Server (Recommended — real MCP protocol)
 
-1. **Start Seshat Server Locally**
+`seshat.mcp.stdio_server` speaks the actual Model Context Protocol
+(JSON-RPC over stdio), so Claude Code can register it directly — no wrapper
+scripts, no manual `curl`/REST plumbing. This is the module to use for real
+Claude Code integration.
+
+> Note: `seshat.mcp.server` / `seshat.mcp.cli` (see Option 2 below) is a
+> plain HTTP/REST server with a custom `POST /call` endpoint. It does **not**
+> speak MCP's JSON-RPC handshake, so Claude Code cannot register it as an
+> MCP server directly — it's useful for the Telegram bot or other custom
+> clients, but not for `claude mcp add`.
+
+1. **Install Seshat**
 
    ```bash
    # In the seshat repo directory
+   python3 -m venv .venv && source .venv/bin/activate
    pip install -e ".[dev]"
-   
-   # Start server with local vault
-   export SESHAT_API_KEY="your-dev-key"
-   python -m seshat.mcp.cli \
-     --vault-root ./vault \
-     --host localhost \
-     --port 8000
    ```
 
-2. **Configure Claude Code MCP**
+2. **Register the server with Claude Code**
 
-   Create `~/.claude/settings.json` (or update existing):
-
-   ```json
-   {
-     "mcpServers": {
-       "seshat-local": {
-         "command": "curl",
-         "args": [],
-         "env": {},
-         "disabled": false
-       }
-     }
-   }
+   ```bash
+   claude mcp add seshat \
+     --env SESHAT_VAULT_ROOT=/absolute/path/to/vault \
+     -- python -m seshat.mcp.stdio_server --vault-root /absolute/path/to/vault
    ```
 
-   Or use `.claude/mcp.json` in the project:
+   This writes an entry to Claude Code's MCP config. Equivalently, you can
+   hand-edit `.claude/mcp.json` in the project:
 
    ```json
    {
      "mcpServers": {
        "seshat": {
          "command": "python",
-         "args": ["-m", "seshat.mcp.cli"],
-         "env": {
-           "SESHAT_VAULT_ROOT": "${workspaceFolder}/vault",
-           "SESHAT_API_KEY": "your-dev-key"
-         }
+         "args": ["-m", "seshat.mcp.stdio_server", "--vault-root", "/absolute/path/to/vault"],
+         "env": {}
        }
      }
    }
    ```
 
+   (The installed console script `seshat-mcp-stdio` also works as `command`
+   if the venv's `bin/` is on `PATH`.)
+
 3. **Start Claude Code**
 
    ```bash
-   claude code
-   # Or via IDE: use the MCP server configuration
+   claude
    ```
+
+   Claude Code launches the server as a subprocess over stdio automatically —
+   there's nothing to keep running separately.
 
 4. **Test Connection**
 
-   In Claude Code, try using a Seshat tool:
+   ```bash
+   claude mcp list   # should show "seshat" as connected
+   ```
+
+   Then in Claude Code, try using a Seshat tool:
 
    ```
-   @seshat list_projects
-   
-   or
-
    Use the "list_projects" tool to show me all projects
    ```
 
-### Option 2: Remote Seshat Server (Production)
+### Option 2: Local HTTP/REST Server (custom clients, e.g. Telegram bot)
+
+This server exposes the 9 tools over a simple `POST /call` REST endpoint —
+not native MCP — for cases where you're writing your own client integration.
+
+```bash
+export SESHAT_API_KEY="your-dev-key"
+python -m seshat.mcp.cli \
+  --vault-root ./vault \
+  --host localhost \
+  --port 8000
+```
+
+Call it directly:
+
+```bash
+curl -X POST http://localhost:8000/call \
+  -H "Authorization: Bearer your-dev-key" \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "list_projects", "params": {}}'
+```
+
+### Option 3: Remote Seshat Server (Production)
 
 For a deployed Seshat server on Render or other cloud platform:
 
