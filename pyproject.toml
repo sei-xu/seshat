@@ -9,10 +9,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+telegram = ["python-telegram-bot>=21.0"]
 
 [project.scripts]
 seshat-server = "seshat.mcp.cli:main"
+seshat-telegram = "seshat.telegram.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -20,3 +22,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["seshat*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
