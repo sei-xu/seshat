@@ -138,3 +138,39 @@ Activate the venv first if needed:
 source .venv/bin/activate
 pytest tests/ -v
 ```
+
+## MCP Integration (Phase 3 Complete)
+
+The complete MCP server is ready with all 9 tools exposed via HTTP/SSE.
+
+### Starting the MCP Server
+
+```bash
+python -m seshat.mcp.cli \
+  --vault-root ./vault \
+  --host localhost \
+  --port 8000 \
+  --api-key your-dev-key
+```
+
+Or use the installed CLI:
+
+```bash
+seshat-server --vault-root ./vault
+```
+
+### Connecting Claude to MCP
+
+See [CLAUDE_MCP.md](CLAUDE_MCP.md) for detailed setup:
+- Local development configuration
+- Remote Render server integration
+- Tool usage examples
+- Troubleshooting guide
+
+### Deployment
+
+Seshat is ready for production deployment on Render or Docker:
+- See [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment guide
+- Includes Dockerfile, render.yaml, environment setup
+- Git sync integration with upstream vault
+- Health checks and monitoring

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "seshat": {
+      "command": "python",
+      "args": ["-m", "seshat.mcp.cli"],
+      "env": {
+        "SESHAT_VAULT_ROOT": "${workspaceFolder}/vault",
+        "SESHAT_API_KEY": "${env:SESHAT_API_KEY}",
+        "SESHAT_HOST": "127.0.0.1",
+        "SESHAT_PORT": "8000"
+      },
+      "disabled": false
+    }
+  }
+}
