@@ -149,6 +149,16 @@ also trigger a `search_vault` query). Write: `/newproject`, `/history`, `/status
 `/newreference` — all take `chave=valor` arguments (quote values with spaces), mirroring the
 signatures of the tools in `seshat/core/tools/`. See `/help` inside the bot for the full syntax.
 
+### Deploying alongside the MCP server (`seshat/combined/`)
+
+`seshat.combined.cli` (entrypoint `seshat-combined`) runs the MCP server and the Telegram bot in
+one process, sharing one vault — this is what `render.yaml` deploys, sized for Render's free tier
+(no persistent disk). Pass `--git-remote`/`AKASHA_GIT_REMOTE` and the vault is `git clone`d fresh
+on every boot and `git push`ed after every write (`seshat.core.git_sync.ensure_synced` +
+`GitVault.commit_and_push`, used by both `seshat.mcp.server.MCPServer` and
+`seshat.telegram.bot.SeshatTelegramBot`) — see `DEPLOYMENT.md` for the full Render walkthrough and
+the free-tier sleep caveat.
+
 ## Running Tests from Claude Code
 
 Use the `/run` skill to start the test suite, or run directly:

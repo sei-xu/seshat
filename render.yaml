@@ -3,25 +3,21 @@ services:
     name: seshat
     runtime: python
     pythonVersion: 3.14
-    buildCommand: pip install -e ".[dev]"
+    buildCommand: pip install -e ".[dev,telegram]"
     startCommand: >
-      python -m seshat.mcp.cli
-      --vault-root /var/data/vault
+      python -m seshat.combined.cli
+      --vault-root /tmp/vault
       --host 0.0.0.0
-      --port 8000
-      --git-remote $AKASHA_GIT_REMOTE
+      --port $PORT
     envVars:
       - key: SESHAT_API_KEY
         scope: run
       - key: AKASHA_GIT_REMOTE
         scope: run
-      - key: SESHAT_VAULT_ROOT
-        value: /var/data/vault
+      - key: SESHAT_TELEGRAM_TOKEN
         scope: run
-    disk:
-      name: vault-data
-      mountPath: /var/data/vault
-      sizeGB: 10
+      - key: SESHAT_TELEGRAM_ALLOWED_USERS
+        scope: run
     health:
       path: /health
       checkIntervalSeconds: 30

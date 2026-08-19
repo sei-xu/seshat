@@ -39,6 +39,22 @@ def split_list(value: str | None) -> list[str] | None:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def parse_allowed_ids(raw: str | None) -> set[int]:
+    """Parse a comma-separated string of Telegram user ids into a set of ints."""
+    if not raw:
+        return set()
+    ids = set()
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            ids.add(int(chunk))
+        except ValueError:
+            raise ArgParseError(f"id de usuário inválido {chunk!r} (esperava inteiro)") from None
+    return ids
+
+
 def require(args: dict[str, str], *keys: str) -> None:
     """Raise ArgParseError listing every missing required key at once."""
     missing = [k for k in keys if k not in args]

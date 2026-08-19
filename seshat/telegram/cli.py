@@ -8,21 +8,14 @@ import os
 from pathlib import Path
 
 from .bot import SeshatTelegramBot
+from .parsing import ArgParseError, parse_allowed_ids
 
 
 def _parse_allowed_ids(raw: str | None) -> set[int]:
-    if not raw:
-        return set()
-    ids = set()
-    for chunk in raw.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        try:
-            ids.add(int(chunk))
-        except ValueError:
-            raise SystemExit(f"SESHAT_TELEGRAM_ALLOWED_USERS: id inválido {chunk!r} (esperava inteiro)")
-    return ids
+    try:
+        return parse_allowed_ids(raw)
+    except ArgParseError as e:
+        raise SystemExit(f"SESHAT_TELEGRAM_ALLOWED_USERS: {e}") from e
 
 
 def main() -> int:
@@ -38,6 +31,13 @@ def main() -> int:
         default=os.getenv("SESHAT_TELEGRAM_ALLOWED_USERS"),
         help="Comma-separated Telegram user ids allowed to use the bot (or set SESHAT_TELEGRAM_ALLOWED_USERS)",
     )
+    parser.add_argument(
+        "--git-remote",
+        default=os.getenv("AKASHA_GIT_REMOTE"),
+        help="Git remote URL for vault sync (or set AKASHA_GIT_REMOTE). "
+        "Required on ephemeral disks (e.g. Render free tier): the vault is cloned from "
+        "here on boot and every write is committed and pushed back.",
+    )
     parser.add_argument("--log-level", default="INFO")
 
     args = parser.parse_args()
@@ -48,8 +48,8 @@ def main() -> int:
         return 1
 
     vault_root = Path(args.vault_root)
-    if not vault_root.is_dir():
-        print(f"Error: vault root does not exist: {vault_root}")
+    if not vault_root.is_dir() and not args.git_remote:
+        print(f"Error: vault root does not exist: {vault_root} (pass --git-remote to clone it on boot)")
         return 1
 
     allowed_user_ids = _parse_allowed_ids(args.allowed_users)
@@ -64,7 +64,7 @@ def main() -> int:
     print(f"  Vault root: {vault_root}")
     print(f"  Allowed users: {sorted(allowed_user_ids)}")
 
-    bot = SeshatTelegramBot(vault_root, args.token, allowed_user_ids)
+    bot = SeshatTelegramBot(vault_root, args.token, allowed_user_ids, git_remote_url=args.git_remote)
     bot.run()
     return 0
 

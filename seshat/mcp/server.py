@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
-from seshat.core import GitVault, VaultClient
+from seshat.core import VaultClient, ensure_synced
 from seshat.core.tools import (
     append_history,
     create_fragment,
@@ -49,11 +49,8 @@ class MCPServer:
 
     def __init__(self, config: ServerConfig):
         self.config = config
+        self.git = ensure_synced(config.vault_root, config.git_remote_url)
         self.vault = VaultClient(config.vault_root)
-        self.git = GitVault(config.vault_root)
-        if not self.git.is_initialized() and config.git_remote_url:
-            self.git.init()
-            self.git.add_remote("origin", config.git_remote_url)
         self.tools = {
             "list_projects": list_projects,
             "get_project": get_project,
@@ -78,6 +75,21 @@ class MCPServer:
         """Stop the HTTP server."""
         if self.server:
             self.server.shutdown()
+
+    def _autosync(self, message: str) -> None:
+        """Commit and push any vault changes after a write tool call.
+
+        No-ops when no git remote is configured, or when the tool call was
+        read-only (commit_and_push checks has_changes() itself). Failures are
+        logged but never raised — a push failure shouldn't turn a successful
+        write into an error response.
+        """
+        if not self.config.git_remote_url:
+            return
+        try:
+            self.git.commit_and_push(message)
+        except Exception as e:
+            print(f"Warning: git autosync failed: {e}")
 
     def _create_handler_class(self):
         """Create HTTP request handler class with server reference."""
@@ -164,6 +176,7 @@ class MCPServer:
                 try:
                     tool_fn = mcp_server.tools[tool_name]
                     result = tool_fn(mcp_server.vault, **params)
+                    mcp_server._autosync(f"seshat: {tool_name}")
                     self._send_json({"result": result, "tool": tool_name})
                 except TypeError as e:
                     self._send_error(400, f"Invalid parameters: {str(e)}")
