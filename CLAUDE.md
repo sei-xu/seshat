@@ -122,7 +122,32 @@ Tools validate their own inputs, call vault layer, and return structured results
 - **Sync Protocol** (`seixu/seshat/11_git_conflitos.md`): Git sync for vault changes, conflict handling
 - **HTTP/SSE Server** (`seshat/mcp/`): MCP server exposed via HTTP/SSE on Render VPS
 - **Authentication**: API key validation for server
-- **Telegram Bot** (`seshat/telegram/`): Chat interface to vault
+
+## Telegram Bot
+
+`seshat/telegram/` is a chat front-end that talks directly to the vault via `seshat.core.tools`
+(it does not go through `seshat.mcp`). Built on `python-telegram-bot` (long polling).
+
+### Running locally
+
+```bash
+pip install -e ".[dev,telegram]"
+
+export SESHAT_TELEGRAM_TOKEN="123456:your-bot-token"       # from @BotFather
+export SESHAT_TELEGRAM_ALLOWED_USERS="111111,222222"       # Telegram user ids allowed to use the bot
+
+python -m seshat.telegram.cli --vault-root ./vault
+# or: seshat-telegram --vault-root ./vault
+```
+
+The bot refuses to start with no allowed user ids configured (no open bot with vault write access).
+
+### Commands
+
+Read: `/projects`, `/project <slug>`, `/references`, `/search query=...` (plain text messages
+also trigger a `search_vault` query). Write: `/newproject`, `/history`, `/status`, `/fragment`,
+`/newreference` — all take `chave=valor` arguments (quote values with spaces), mirroring the
+signatures of the tools in `seshat/core/tools/`. See `/help` inside the bot for the full syntax.
 
 ## Running Tests from Claude Code
 
