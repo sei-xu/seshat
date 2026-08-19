@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: seshat
+    runtime: python
+    pythonVersion: 3.14
+    buildCommand: pip install -e ".[dev]"
+    startCommand: >
+      python -m seshat.mcp.cli
+      --vault-root /var/data/vault
+      --host 0.0.0.0
+      --port 8000
+      --git-remote $SESHAT_GIT_REMOTE
+    envVars:
+      - key: SESHAT_API_KEY
+        scope: run
+      - key: SESHAT_GIT_REMOTE
+        scope: run
+      - key: SESHAT_VAULT_ROOT
+        value: /var/data/vault
+        scope: run
+    disk:
+      name: vault-data
+      mountPath: /var/data/vault
+      sizeGB: 10
+    health:
+      path: /health
+      checkIntervalSeconds: 30
+    autoDeploy: true
+    region: ohio
