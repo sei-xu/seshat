@@ -9,11 +9,11 @@ services:
       --vault-root /var/data/vault
       --host 0.0.0.0
       --port 8000
-      --git-remote $SESHAT_GIT_REMOTE
+      --git-remote $AKASHA_GIT_REMOTE
     envVars:
       - key: SESHAT_API_KEY
         scope: run
-      - key: SESHAT_GIT_REMOTE
+      - key: AKASHA_GIT_REMOTE
         scope: run
       - key: SESHAT_VAULT_ROOT
         value: /var/data/vault

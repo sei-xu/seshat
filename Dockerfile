@@ -34,4 +34,4 @@ CMD ["python", "-m", "seshat.mcp.cli", \
      "--vault-root", "/vault", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
-     "--git-remote", "${SESHAT_GIT_REMOTE}"]
+     "--git-remote", "${AKASHA_GIT_REMOTE}"]

@@ -232,7 +232,7 @@ export SESHAT_API_KEY="your-production-key"
 ```bash
 export SESHAT_HOST="127.0.0.1"      # MCP server host
 export SESHAT_PORT="8000"           # MCP server port
-export SESHAT_GIT_REMOTE="https://..." # Git repo for sync
+export AKASHA_GIT_REMOTE="https://..." # Git repo for sync
 ```
 
 ## Troubleshooting

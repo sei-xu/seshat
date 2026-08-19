@@ -65,7 +65,7 @@ docker run \
   -p 8000:8000 \
   -v vault-data:/var/data/vault \
   -e SESHAT_API_KEY=your-secure-key \
-  -e SESHAT_GIT_REMOTE=https://github.com/username/vault.git \
+  -e AKASHA_GIT_REMOTE=https://github.com/username/vault.git \
   seshat:latest
 ```
 
@@ -84,7 +84,7 @@ docker run \
    - Go to Service → Settings → Environment
    - Add the following variables:
      - `SESHAT_API_KEY`: Generate with `openssl rand -hex 32`
-     - `SESHAT_GIT_REMOTE`: URL to vault repository
+     - `AKASHA_GIT_REMOTE`: URL to vault repository
 
 4. **Configure Persistent Disk**
    - Service → Disks
@@ -99,7 +99,7 @@ docker run \
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `SESHAT_API_KEY` | `<generate>` | Create secure random key |
-| `SESHAT_GIT_REMOTE` | `https://github.com/.../vault.git` | Upstream vault repo |
+| `AKASHA_GIT_REMOTE` | `https://github.com/.../vault.git` | Upstream vault repo |
 | `SESHAT_VAULT_ROOT` | `/var/data/vault` | Persistent disk path |
 
 ### Accessing the Server
@@ -126,7 +126,7 @@ The server integrates with git for vault updates:
 # The server automatically initializes git and adds the remote on startup
 
 # Local testing:
-SESHAT_GIT_REMOTE=https://github.com/username/vault.git \
+AKASHA_GIT_REMOTE=https://github.com/username/vault.git \
   python -m seshat.mcp.cli --vault-root ./vault
 ```
 
@@ -157,7 +157,7 @@ curl "https://your-service.render.com/git/log?max=10" \
 1. Check environment variables are set:
    ```bash
    echo $SESHAT_API_KEY
-   echo $SESHAT_GIT_REMOTE
+   echo $AKASHA_GIT_REMOTE
    ```
 
 2. View logs on Render:
@@ -168,7 +168,7 @@ curl "https://your-service.render.com/git/log?max=10" \
 
 1. Verify git remote is accessible:
    ```bash
-   git clone $SESHAT_GIT_REMOTE test-clone
+   git clone $AKASHA_GIT_REMOTE test-clone
    ```
 
 2. Check git credentials (if private repo):
