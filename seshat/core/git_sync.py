@@ -58,6 +58,48 @@ class GitVault:
             )
         except subprocess.CalledProcessError as e:
             raise GitSyncError(f"git init failed: {e.stderr.decode()}") from e
+        self._ensure_local_identity()
+
+    def clone(self, remote_url: str, branch: str = "main") -> None:
+        """Clone `remote_url` into `vault_root`, which must exist and be empty.
+
+        Used to populate an ephemeral (non-persistent) disk on boot, e.g. Render
+        free-tier web services with no persistent disk attached.
+        """
+        if self.is_initialized():
+            raise GitSyncError(f"{self.vault_root} already has a git repo — use pull() instead")
+        if any(self.vault_root.iterdir()):
+            raise GitSyncError(f"vault root not empty, refusing to clone into it: {self.vault_root}")
+        try:
+            subprocess.run(
+                ["git", "clone", "--branch", branch, remote_url, "."],
+                cwd=self.vault_root,
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise GitSyncError(f"git clone failed: {e.stderr.decode()}") from e
+        self._ensure_local_identity()
+
+    def _ensure_local_identity(self) -> None:
+        """Set a local (repo-scoped) commit identity if none is configured.
+
+        Fresh containers have no global git config, and `git commit` refuses to
+        run without a committer identity.
+        """
+        for key, value in (("user.name", "Seshat"), ("user.email", "seshat@seîxu.local")):
+            result = subprocess.run(
+                ["git", "config", "--get", key],
+                cwd=self.vault_root,
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                subprocess.run(
+                    ["git", "config", key, value],
+                    cwd=self.vault_root,
+                    check=True,
+                    capture_output=True,
+                )
 
     def add_remote(self, name: str, url: str) -> None:
         """Add remote repository (usually 'origin')."""
@@ -231,6 +273,22 @@ class GitVault:
         except subprocess.CalledProcessError:
             pass  # Merge may not be in progress, ignore
 
+    def commit_and_push(
+        self,
+        message: str,
+        remote: str = "origin",
+        branch: str = "main",
+        author_name: str = "Seshat",
+        author_email: str = "seshat@seîxu.local",
+    ) -> str | None:
+        """Commit any pending changes and push. Returns the commit hash, or None if
+        there was nothing to commit (e.g. a read-only tool call)."""
+        if not self.has_changes():
+            return None
+        commit_hash = self.commit(message, author_name=author_name, author_email=author_email)
+        self.push(remote=remote, branch=branch)
+        return commit_hash
+
     def push(self, remote: str = "origin", branch: str = "main") -> str:
         """Push commits to remote. Returns status message."""
         try:
@@ -294,3 +352,42 @@ class GitVault:
             return commits
         except subprocess.CalledProcessError:
             return []
+
+
+def ensure_synced(vault_root: str | Path, remote_url: str | None, branch: str = "main") -> GitVault:
+    """Make sure `vault_root` exists and, if `remote_url` is set, reflects it.
+
+    Handles three starting states so callers can use the same vault_root on
+    both a fresh ephemeral disk (Render free tier: cloned fresh on every boot)
+    and a persistent one (already a git repo: just pulled). No-ops on git if
+    `remote_url` is falsy — the caller is then responsible for the directory
+    already having the vault's required folders (e.g. a local dev clone).
+    """
+    root = Path(vault_root)
+    root.mkdir(parents=True, exist_ok=True)
+    vault = GitVault(root)
+
+    if not remote_url:
+        return vault
+
+    if vault.is_initialized():
+        # Best-effort refresh — a transient network hiccup shouldn't crash a
+        # deployment that already has a working vault on disk.
+        try:
+            vault.pull(branch=branch)
+        except GitSyncError as e:
+            print(f"Warning: git pull on startup failed, continuing with disk contents: {e}")
+    elif any(root.iterdir()):
+        # Pre-existing content (e.g. required folders precreated) without a repo yet.
+        vault.init()
+        vault.add_remote("origin", remote_url)
+        try:
+            vault.pull(branch=branch)
+        except GitSyncError as e:
+            print(f"Warning: git pull on startup failed, continuing with disk contents: {e}")
+    else:
+        # Truly empty disk (e.g. Render free tier, no persistent disk) — this
+        # clone IS the vault's only source of content, so let failures raise.
+        vault.clone(remote_url, branch=branch)  # `git clone` sets up "origin" itself
+
+    return vault

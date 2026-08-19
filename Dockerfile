@@ -1,5 +1,7 @@
-# Seshat MCP Server Dockerfile
-# Runs the Seshat HTTP/SSE server exposing tools via MCP protocol
+# Seshat combined service Dockerfile
+# Runs the MCP HTTP/SSE server and the Telegram bot in one process, sharing
+# one vault clone (see seshat/combined/cli.py). Set AKASHA_GIT_REMOTE to sync
+# the vault via git — required if /vault isn't a persistent volume.
 
 FROM python:3.14-slim
 
@@ -13,25 +15,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy package files
 COPY pyproject.toml .
 
-# Install dependencies (including dev for package installation)
-RUN pip install --no-cache-dir -e ".[dev]"
+# Install dependencies (including dev/telegram extras for package installation)
+RUN pip install --no-cache-dir -e ".[dev,telegram]"
 
 # Copy source code
 COPY seshat/ ./seshat/
 
-# Create vault directories (will be mounted or synced)
+# Create vault directories (used when AKASHA_GIT_REMOTE is unset — otherwise
+# seshat.combined.cli clones over this on boot)
 RUN mkdir -p /vault/{01-Fragments,02-Projects,03-References,seixu}
-
-# Set vault root as default
-ENV SESHAT_VAULT_ROOT=/vault
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()" || exit 1
 
-# Run MCP server
-CMD ["python", "-m", "seshat.mcp.cli", \
+# Run the combined MCP server + Telegram bot service
+CMD ["python", "-m", "seshat.combined.cli", \
      "--vault-root", "/vault", \
      "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--git-remote", "${AKASHA_GIT_REMOTE}"]
+     "--port", "8000"]

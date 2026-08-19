@@ -37,14 +37,17 @@ def main():
     )
     parser.add_argument(
         "--git-remote",
-        help="Git remote URL for vault sync (optional)",
+        default=os.getenv("AKASHA_GIT_REMOTE"),
+        help="Git remote URL for vault sync (or set AKASHA_GIT_REMOTE). "
+        "Required on ephemeral disks (e.g. Render free tier): the vault is cloned from "
+        "here on boot and every write is committed and pushed back.",
     )
 
     args = parser.parse_args()
 
     vault_root = Path(args.vault_root)
-    if not vault_root.is_dir():
-        print(f"Error: vault root does not exist: {vault_root}")
+    if not vault_root.is_dir() and not args.git_remote:
+        print(f"Error: vault root does not exist: {vault_root} (pass --git-remote to clone it on boot)")
         return 1
 
     config = ServerConfig(

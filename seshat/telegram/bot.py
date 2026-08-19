@@ -13,7 +13,7 @@ from pathlib import Path
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from seshat.core import VaultClient
+from seshat.core import VaultClient, ensure_synced
 from seshat.core.tools import (
     append_history,
     create_fragment,
@@ -62,11 +62,34 @@ Digite qualquer texto sem comando pra buscar no vault\\.
 class SeshatTelegramBot:
     """Wraps a python-telegram-bot Application wired to a Seshat vault."""
 
-    def __init__(self, vault_root: str | Path, telegram_token: str, allowed_user_ids: set[int]):
+    def __init__(
+        self,
+        vault_root: str | Path,
+        telegram_token: str,
+        allowed_user_ids: set[int],
+        git_remote_url: str | None = None,
+    ):
+        self.git = ensure_synced(vault_root, git_remote_url)
         self.vault = VaultClient(vault_root)
+        self.git_remote_url = git_remote_url
         self.allowed_user_ids = allowed_user_ids
         self.app = Application.builder().token(telegram_token).build()
         self._register_handlers()
+
+    def _autosync(self, message: str) -> None:
+        """Commit and push any vault changes after a write command.
+
+        No-ops when no git remote is configured. Failures are logged but never
+        raised — a push failure shouldn't turn a successful write into an
+        error reply, and on an ephemeral disk the next boot's clone will just
+        be missing this one change rather than losing the whole vault.
+        """
+        if not self.git_remote_url:
+            return
+        try:
+            self.git.commit_and_push(message)
+        except Exception as e:
+            logger.warning("git autosync failed: %s", e)
 
     def _register_handlers(self) -> None:
         self.app.add_handler(CommandHandler("start", self.cmd_help))
@@ -201,6 +224,7 @@ class SeshatTelegramBot:
                 project_stage=args.get("stage", "call"),
                 khaos_project_id=args.get("khaos_id"),
             )
+            self._autosync(f"telegram: cria projeto {result['slug']}")
             await self._reply_md(update, f"✅ Projeto criado: `{escape_md(result['slug'])}`")
         except (ArgParseError, Exception) as e:
             await self._reply_md(update, format_error(e))
@@ -219,6 +243,7 @@ class SeshatTelegramBot:
                 summary_line=args["summary"],
                 detail=args.get("detail", ""),
             )
+            self._autosync(f"telegram: histórico em {args['slug']}")
             await self._reply_md(update, f"✅ Entrada de histórico adicionada a `{escape_md(args['slug'])}`")
         except Exception as e:
             await self._reply_md(update, format_error(e))
@@ -238,6 +263,7 @@ class SeshatTelegramBot:
                 summary_line=args.get("summary"),
                 detail=args.get("detail", ""),
             )
+            self._autosync(f"telegram: status de {result['slug']}")
             await self._reply_md(update, f"✅ Status atualizado: `{escape_md(result['slug'])}`")
         except Exception as e:
             await self._reply_md(update, format_error(e))
@@ -257,6 +283,7 @@ class SeshatTelegramBot:
                 body=args["body"],
                 tags=split_list(args.get("tags")),
             )
+            self._autosync(f"telegram: cria fragmento {result['path']}")
             await self._reply_md(update, f"✅ Fragmento criado: `{escape_md(result['path'])}`")
         except Exception as e:
             await self._reply_md(update, format_error(e))
@@ -279,6 +306,7 @@ class SeshatTelegramBot:
                 as_folder=args.get("folder", "false").lower() in ("1", "true", "yes"),
                 tags=split_list(args.get("tags")),
             )
+            self._autosync(f"telegram: cria referência {result['area_slug']}/{result['slug']}")
             await self._reply_md(update, f"✅ Referência criada: `{escape_md(result['area_slug'])}/{escape_md(result['slug'])}`")
         except Exception as e:
             await self._reply_md(update, format_error(e))

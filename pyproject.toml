@@ -15,6 +15,7 @@ telegram = ["python-telegram-bot>=21.0"]
 [project.scripts]
 seshat-server = "seshat.mcp.cli:main"
 seshat-telegram = "seshat.telegram.cli:main"
+seshat-combined = "seshat.combined.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
