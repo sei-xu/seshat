@@ -21,12 +21,13 @@ def bot(tmp_path):
     return SeshatTelegramBot(tmp_path, telegram_token="123:fake-token", allowed_user_ids={ALLOWED_USER})
 
 
-def make_update(user_id, args_text=""):
+def make_update(user_id, args_text="", user_data=None):
     update = MagicMock()
     update.effective_user.id = user_id
     update.message.reply_text = AsyncMock()
     context = MagicMock()
     context.args = args_text.split() if args_text else []
+    context.user_data = user_data if user_data is not None else {}
     return update, context
 
 
@@ -101,25 +102,48 @@ async def test_status_update(bot):
 
 
 @pytest.mark.asyncio
-async def test_fragment_creation(bot):
-    update, context = make_update(
-        ALLOWED_USER,
-        'filename_slug=nota title="Nota" summary="s" field=Programação body="corpo"',
-    )
+async def test_fragment_creation_via_followup_text(bot):
+    user_data = {}
+    update, context = make_update(ALLOWED_USER, user_data=user_data)
     await bot.cmd_fragment(update, context)
-    assert "criado" in last_reply_text(update)
-    assert bot.vault.exists("01-Fragments/nota.md")
+    assert "Envie o texto" in last_reply_text(update)
+    assert user_data["awaiting_fragment_field"] == "Pessoal"
+
+    update2, context2 = make_update(ALLOWED_USER, user_data=user_data)
+    update2.message.text = "Ideia de logo\nresto do corpo"
+    await bot.on_text(update2, context2)
+    assert "criado" in last_reply_text(update2)
+    assert "awaiting_fragment_field" not in user_data
+
+    fragments = list((bot.vault.root / "01-Fragments").glob("*.md"))
+    assert len(fragments) == 1
+    assert fragments[0].read_text().startswith("---")
+
+
+@pytest.mark.asyncio
+async def test_fragment_creation_with_field_argument(bot):
+    user_data = {}
+    update, context = make_update(ALLOWED_USER, "Programação", user_data=user_data)
+    await bot.cmd_fragment(update, context)
+    assert user_data["awaiting_fragment_field"] == "Programação"
+
+    update2, context2 = make_update(ALLOWED_USER, user_data=user_data)
+    update2.message.text = "nota técnica raríssima"
+    await bot.on_text(update2, context2)
+    assert "criado" in last_reply_text(update2)
 
 
 @pytest.mark.asyncio
 async def test_search_free_text(bot):
-    update, context = make_update(
-        ALLOWED_USER,
-        'filename_slug=nota title="Nota especial" summary="s" field=Programação body="corpo raro"',
-    )
+    user_data = {}
+    update, context = make_update(ALLOWED_USER, user_data=user_data)
     await bot.cmd_fragment(update, context)
 
-    update2, context2 = make_update(ALLOWED_USER)
-    update2.message.text = "raro"
+    update2, context2 = make_update(ALLOWED_USER, user_data=user_data)
+    update2.message.text = "corpo raro do fragmento"
     await bot.on_text(update2, context2)
-    assert "resultado" in last_reply_text(update2)
+
+    update3, context3 = make_update(ALLOWED_USER, user_data=user_data)
+    update3.message.text = "raro"
+    await bot.on_text(update3, context3)
+    assert "resultado" in last_reply_text(update3)

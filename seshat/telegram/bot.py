@@ -8,12 +8,14 @@ write command requires the sender's Telegram user id to be in the allowlist.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from seshat.core import VaultClient, ensure_synced
+from seshat.core.schema import FIELDS
 from seshat.core.tools import (
     append_history,
     create_fragment,
@@ -25,6 +27,7 @@ from seshat.core.tools import (
     search_vault,
     update_project_status,
 )
+from seshat.core.vault import slugify
 
 from .formatting import (
     escape_md,
@@ -51,7 +54,7 @@ Comandos de escrita:
 /newproject year\\_month=202608 slug=teste title="Teste" summary="\\.\\.\\." field=Programação type=comercial
 /history slug=202608\\_teste date=2026\\-08\\-19 title="Início" summary="\\.\\.\\."
 /status slug=202608\\_teste project\\_status=in\\_progress date=2026\\-08\\-19
-/fragment filename\\_slug=nota title="Nota" summary="\\.\\.\\." field=Programação body="\\.\\.\\."
+/fragment \\[campo\\] — depois envie o texto numa mensagem separada, o resto é preenchido automaticamente
 /newreference area=caligrafia slug=x title="X" summary="\\.\\.\\." field=Caligrafia type=technique
 
 Argumentos são `chave=valor`, use aspas para valores com espaço\\.
@@ -69,9 +72,11 @@ BOT_COMMANDS = [
     ("newproject", "Cria um novo projeto"),
     ("history", "Adiciona entrada ao histórico de um projeto"),
     ("status", "Atualiza status/etapa de um projeto"),
-    ("fragment", "Cria um fragmento"),
+    ("fragment", "Captura um fragmento — envie o texto na mensagem seguinte"),
     ("newreference", "Cria uma referência"),
 ]
+
+FRAGMENT_DEFAULT_FIELD = "Pessoal"
 
 
 class SeshatTelegramBot:
@@ -217,9 +222,37 @@ class SeshatTelegramBot:
     async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._guard(update):
             return
+        pending_field = context.user_data.pop("awaiting_fragment_field", None)
+        if pending_field is not None:
+            await self._create_fragment_from_text(update, update.message.text, pending_field)
+            return
         try:
             results = search_vault(self.vault, query=update.message.text)
             await self._reply_md(update, format_search_results(results))
+        except Exception as e:
+            await self._reply_md(update, format_error(e))
+
+    async def _create_fragment_from_text(self, update: Update, text: str, field: str) -> None:
+        try:
+            text = text.strip()
+            if not text:
+                raise ValueError("texto vazio — nada pra guardar")
+            first_line = text.splitlines()[0].strip()
+            title = first_line[:80]
+            summary = first_line if len(first_line) <= 140 else first_line[:137] + "..."
+            filename_slug = f"{slugify(title)}-{datetime.now():%Y%m%d%H%M%S}"
+            result = create_fragment(
+                self.vault,
+                filename_slug=filename_slug,
+                title=title,
+                summary=summary,
+                field=field,
+                body=text,
+            )
+            self._autosync(f"telegram: cria fragmento {result['path']}")
+            await self._reply_md(
+                update, f"✅ Fragmento criado: `{escape_md(result['path'])}` \\(campo: {escape_md(field)}\\)"
+            )
         except Exception as e:
             await self._reply_md(update, format_error(e))
 
@@ -288,24 +321,27 @@ class SeshatTelegramBot:
             await self._reply_md(update, format_error(e))
 
     async def cmd_fragment(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Captura rápida: /fragment [campo opcional], depois o texto vem na mensagem seguinte.
+
+        Título, resumo e nome do arquivo são derivados do próprio texto — o
+        único dado que precisa ser dado é o corpo do fragmento (triagem de
+        campo/tags fica pra depois, `triage_status: pending`).
+        """
         if not await self._guard(update):
             return
-        try:
-            args = parse_kv_args(" ".join(context.args))
-            require(args, "filename_slug", "title", "summary", "field", "body")
-            result = create_fragment(
-                self.vault,
-                filename_slug=args["filename_slug"],
-                title=args["title"],
-                summary=args["summary"],
-                field=args["field"],
-                body=args["body"],
-                tags=split_list(args.get("tags")),
-            )
-            self._autosync(f"telegram: cria fragmento {result['path']}")
-            await self._reply_md(update, f"✅ Fragmento criado: `{escape_md(result['path'])}`")
-        except Exception as e:
-            await self._reply_md(update, format_error(e))
+        field = FRAGMENT_DEFAULT_FIELD
+        if context.args:
+            candidate = context.args[0]
+            if candidate in FIELDS:
+                field = candidate
+            else:
+                await self._reply_md(
+                    update,
+                    f"⚠️ Campo desconhecido: `{escape_md(candidate)}`\\. Usando `{escape_md(field)}`\\. "
+                    f"Campos válidos: {escape_md(', '.join(sorted(FIELDS)))}",
+                )
+        context.user_data["awaiting_fragment_field"] = field
+        await update.message.reply_text(f"Envie o texto do fragmento na próxima mensagem (campo: {field}).")
 
     async def cmd_newreference(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._guard(update):
